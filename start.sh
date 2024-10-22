@@ -1,4 +1,4 @@
 mkdir server
 python3 -m http.server -d server &
-python3 neko.py
+python3 bot.py
 #!/bin/bash
