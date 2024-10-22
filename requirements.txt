@@ -1,0 +1,4 @@
+pytelegrambotapi
+pillow
+pyrogram 
+tgcrypto 
