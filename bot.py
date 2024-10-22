@@ -21,9 +21,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Define tus credenciales de Telegram
-API_ID = "YOUR_API_ID" # Reemplaza con tu API_ID
-API_HASH = "YOUR_API_HASH" # Reemplaza con tu API_HASH
-BOT_TOKEN = "YOUR_BOT_TOKEN" # Reemplaza con tu BOT_TOKEN
+API_ID = "24288670" # Reemplaza con tu API_ID
+API_HASH = "81c58005802498656d6b689dae1edacc" # Reemplaza con tu API_HASH
+BOT_TOKEN = "8034560855:AAEUzD4OgNWd0I6tMJopVdhPNWZVsBR7qXw" # Reemplaza con tu BOT_TOKEN
 
 # Crea un cliente de Pyrogram
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
