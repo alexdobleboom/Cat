@@ -95,7 +95,7 @@ def send_welcome(message):
     username = message.from_user.username or message.from_user.first_name
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("PELICULA🎬", "SERIE📺", "GAME🎮", "Soporte📱", "DL_YOUTUBE")
-    send_message_with_rich_logging(message.chat.id, f"¡Hola {username}! con este bot puedes crear tus plantillas más fáciles \n\n¡También puedes descargar las miniaturas de Youtube!\n\nChannel: @hc_free:", reply_markup=markup)
+    send_message_with_rich_logging(message.chat.id, f"¡Hola {username}! con este bot puedes crear tus plantillas más fáciles \n\n¡También puedes descargar las miniaturas de Youtube!\n\nChannel: @zonafreecanal:", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "Soporte📱")
 def support_command(message):
@@ -493,7 +493,7 @@ def descargar_miniatura(video_id, chat_id):
         
         bot.send_photo(chat_id, open(ruta_archivo, 'rb'), caption='⚡ Miniatura descargada 💾')
     else:
-        send_message_with_rich_logging(chat_id, '🧐Error al descargar, contacte a @Creazy_Call🧐')
+        send_message_with_rich_logging(chat_id, '🧐Error al descargar, contacte a él servicio de soporte 🧐')
 
 def run_server():
     PORT = 9000
