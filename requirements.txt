@@ -1,4 +1,1 @@
-pillow
-tgcrypto 
-telethon 
-ffmpeg-python 
+telebot
