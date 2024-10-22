@@ -7,7 +7,7 @@ import sqlite3
 import asyncio
 
 # Reemplaza esto con tu token de bot de Telegram
-BOT_TOKEN = "TU_TOKEN_AQUI"
+BOT_TOKEN = "8034560855:AAEUzD4OgNWd0I6tMJopVdhPNWZVsBR7qXw"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # Almacena el estado del usuario
