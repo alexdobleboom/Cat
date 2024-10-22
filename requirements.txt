@@ -1,3 +1,4 @@
 pillow
-pyrogram 
 tgcrypto 
+telethon 
+ffmpeg-python 
