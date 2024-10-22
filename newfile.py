@@ -13,12 +13,12 @@ import sys
 logger.remove()  # Eliminar manejadores predeterminados
 logger.add(sys.stderr, level="WARNING")  # Solo mostrará WARN y ERROR en la consola
 
-bot = telebot.TeleBot(' Aqui va el token DESTROY')  # Reemplaza con tu token real
+bot = telebot.TeleBot('8034560855:AAEUzD4OgNWd0I6tMJopVdhPNWZVsBR7qXw')  # Reemplaza con tu token real
 
 movie_info = {}
 serie_info = {}
 game_info = {}
-admin_chat_id = 7204295702  # Reemplaza con el chat ID del administrador
+admin_chat_id = 7551486576  # Reemplaza con el chat ID del administrador
 banned_users = set()
 banned_ids = set()
 user_ids = set()
