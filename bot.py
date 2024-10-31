@@ -53,18 +53,18 @@ def ban_user(message):
             if identifier.startswith('@'):
                 username_to_ban = identifier[1:]
                 banned_users.add(username_to_ban)
-                send_message_with_rich_logging(message.chat.id, f"Usuario @{username_to_ban} ha sido prohibido.")
+                send_message_with_rich_logging(message.chat.id, f"✔️ 𝑼𝒔𝒖𝒂𝒓𝒊𝒐 @{username_to_ban} 𝒉𝒂 𝒔𝒊𝒅𝒐 𝒆𝒍𝒊𝒎𝒊𝒏𝒂𝒅𝒐 ✔️.")
             else:
                 try:
                     user_id_to_ban = int(identifier)
                     banned_ids.add(user_id_to_ban)
-                    send_message_with_rich_logging(message.chat.id, f"Usuario con ID {user_id_to_ban} ha sido prohibido.")
+                    send_message_with_rich_logging(message.chat.id, f"✔️𝑼𝒔𝒖𝒂𝒓𝒊𝒐 𝒄𝒐𝒏 𝑰𝑫 {user_id_to_ban} 𝒉𝒂 𝒔𝒊𝒅𝒐 𝒆𝒍𝒊𝒎𝒊𝒏𝒂𝒅𝒐 ✔️.")
                 except ValueError:
-                    send_message_with_rich_logging(message.chat.id, "Formato incorrecto. Usa /ban @username o /ban user_id.")
+                    send_message_with_rich_logging(message.chat.id, "‼️𝑭𝒐𝒓𝒎𝒂𝒕𝒐 𝒊𝒏𝒄𝒐𝒓𝒓𝒆𝒄𝒕𝒐.𝑼𝒔𝒆 /ban @username 𝒐 /ban user_id ‼️.")
         else:
-            send_message_with_rich_logging(message.chat.id, "Por favor, especifica un usuario para prohibir usando la forma: /ban @username o /ban user_id.")
+            send_message_with_rich_logging(message.chat.id, "⭕𝑬𝒔𝒑𝒆𝒄𝒊𝒇𝒊𝒄𝒂 𝒂𝒍 𝒖𝒔𝒖𝒂𝒓𝒊𝒐 𝒖𝒔𝒂𝒏𝒅𝒐: /ban @username o /ban user_id ⭕.")
     else:
-        send_message_with_rich_logging(message.chat.id, "No tienes permiso para usar este comando.")
+        send_message_with_rich_logging(message.chat.id, "❌𝑵𝒐 𝒕𝒊𝒆𝒏𝒆 𝒑𝒆𝒓𝒎𝒊𝒔𝒐 𝒑𝒂𝒓𝒂 𝒖𝒔𝒂𝒓 𝒆𝒔𝒕𝒆 𝒄𝒐𝒎𝒂𝒏𝒅𝒐❌.")
 
 @bot.message_handler(commands=['send'])
 def send_message_to_all(message):
@@ -78,13 +78,13 @@ def send_message_to_all(message):
                     bot.send_message(user_id, text_message, parse_mode='MarkdownV2')
                     success_count += 1
                 except Exception as e:
-                    logger.warning(f"Error al enviar mensaje a {user_id}: {e}")
+                    logger.warning(f"⭕ 𝑬𝒓𝒓𝒐𝒓 𝒂𝒍 𝒆𝒏𝒗𝒊𝒂𝒓 𝒎𝒆𝒏𝒔𝒂𝒋𝒆 𝒂 {user_id}: {e}")
             if success_count > 0:
-                send_message_with_rich_logging(message.chat.id, f"Mensaje enviado a {success_count} usuarios.")
+                send_message_with_rich_logging(message.chat.id, f"✔️ 𝑺𝒆 𝒆𝒏𝒗𝒊𝒐 𝒆𝒍 𝒎𝒆𝒏𝒔𝒂𝒋𝒆 𝒂 {success_count} 𝒖𝒔𝒖𝒂𝒓𝒊𝒐𝒔 ✔️.")
         else:
-            send_message_with_rich_logging(message.chat.id, "Por favor, especifica el mensaje que deseas enviar.")
+            send_message_with_rich_logging(message.chat.id, "⭕ 𝑬𝒔𝒑𝒆𝒄𝒊𝒇𝒊𝒄𝒂 𝒆𝒍 𝒎𝒆𝒏𝒔𝒂𝒋𝒆 ⭕.")
     else:
-        send_message_with_rich_logging(message.chat.id, "No tienes permiso para usar este comando.")
+        send_message_with_rich_logging(message.chat.id, "❌ 𝑵𝒐 𝒑𝒐𝒔𝒆𝒆 𝒑𝒆𝒓𝒎𝒊𝒔𝒐 ❌.")
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -94,8 +94,8 @@ def send_welcome(message):
     user_ids.add(message.from_user.id)
     username = message.from_user.username or message.from_user.first_name
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("PELICULA🎬", "SERIE📺", "GAME🎮", "Soporte📱", "DL_YOUTUBE")
-    send_message_with_rich_logging(message.chat.id, f"¡Hola {username}! con este bot puedes crear tus plantillas más fáciles \n\n¡También puedes descargar las miniaturas de Youtube!\n\nChannel: @zonafreecanal:", reply_markup=markup)
+    markup.add("PELICULA🎬", "SERIE📺", "GAME🎮", "Soporte📱")
+    send_message_with_rich_logging(message.chat.id, f"¡𝑯𝒐𝒍𝒂 {username}! 𝒔𝒐𝒚 𝒄𝒂𝒑𝒂𝒛 𝒅𝒆 𝒄𝒓𝒆𝒂𝒓 𝒑𝒍𝒂𝒏𝒕𝒊𝒍𝒍𝒂𝒔 \n\nChannel: @animalprojets:", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "Soporte📱")
 def support_command(message):
@@ -128,7 +128,7 @@ def receive_support_message(message):
 
     main_menu(message)
 
-@bot.message_handler(func=lambda message: message.text == "DL_YOUTUBE")
+@bot.message_handler(func=lambda message: message.text == "mmm")
 def photo_command(message):
     if banned_user_handler(message):
         return
@@ -464,7 +464,7 @@ def cancel_template(message):
 
 def main_menu(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("PELICULA🎬", "SERIE📺", "GAME🎮", "Soporte📱", "DL_YOUTUBE")
+    markup.add("PELICULA🎬", "SERIE📺", "GAME🎮", "Soporte📱")
     send_message_with_rich_logging(message.chat.id, "¡Elige una opción:", reply_markup=markup)
 
 def obtener_id_video(url):
