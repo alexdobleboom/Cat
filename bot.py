@@ -55,7 +55,9 @@ def cancel_operation(message):
     bot.send_message(message.chat.id, "Operación cancelada ✅", reply_markup=main_menu())
 
 # ====================== MANEJO DE PLANTILLAS ======================
-def handle_media_template(message, media_type):
+@bot.message_handler(func=lambda m: m.text in ["🎬 Película", "📺 Serie", "🎮 Juego"])
+def handle_template_selection(message):
+    media_type = message.text
     USER_STATES[message.from_user.id] = {
         'type': media_type,
         'step': 0,
