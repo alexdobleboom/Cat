@@ -1,13 +1,12 @@
 import telebot
 from telebot import types
 import requests
-import threading
 import time
 from urllib.parse import urlparse, parse_qs
 from loguru import logger
 
 # Configuración inicial
-TOKEN = '7507770865:AAFDQ0Lbuo5Ca-mTnqSa-dK_UJENs5B2v1Q'
+TOKEN = '7983018406:AAFxq9xYJQgn5YblCf1bvunwIVj-krWUrY8'
 ADMIN_CHAT_ID = 7551486576  # Reemplaza con tu ID
 bot = telebot.TeleBot(TOKEN)
 
@@ -19,7 +18,7 @@ REGISTERED_USERS = set()
 # Configurar logger
 logger.add("bot.log", rotation="1 MB", retention="3 days", level="INFO")
 
-# Teclados
+# ====================== TECLADOS ======================
 def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     buttons = ["🎬 Película", "📺 Serie", "🎮 Juego", "📸 YouTube", "🆘 Soporte"]
@@ -31,7 +30,7 @@ def cancel_menu():
     markup.add("❌ Cancelar")
     return markup
 
-# Handlers principales
+# ====================== HANDLERS PRINCIPALES ======================
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user = message.from_user
@@ -51,22 +50,31 @@ def send_welcome(message):
 
 @bot.message_handler(func=lambda m: m.text == "❌ Cancelar")
 def cancel_operation(message):
-    USER_STATES.pop(message.from_user.id, None)
+    user_id = message.from_user.id
+    USER_STATES.pop(user_id, None)
     bot.send_message(message.chat.id, "Operación cancelada ✅", reply_markup=main_menu())
 
-# Manejador de plantillas
+# ====================== MANEJO DE PLANTILLAS ======================
 def handle_media_template(message, media_type):
-    USER_STATES[message.from_user.id] = {'type': media_type, 'step': 0}
+    USER_STATES[message.from_user.id] = {
+        'type': media_type,
+        'step': 0,
+        'data': {}
+    }
     msg = bot.send_message(message.chat.id, "📤 Envía la imagen principal:", reply_markup=cancel_menu())
     bot.register_next_step_handler(msg, process_media_step)
 
 def process_media_step(message):
+    if message.text == "❌ Cancelar":
+        return cancel_operation(message)
+    
     user_id = message.from_user.id
     if message.content_type != 'photo':
         msg = bot.send_message(message.chat.id, "⚠️ Formato incorrecto. Envía una imagen válida:", reply_markup=cancel_menu())
-        return bot.register_next_step_handler(msg, process_media_step)
+        bot.register_next_step_handler(msg, process_media_step)
+        return
     
-    USER_STATES[user_id]['photo'] = message.photo[-1].file_id
+    USER_STATES[user_id]['data']['photo'] = message.photo[-1].file_id
     ask_next_field(message)
 
 def ask_next_field(message):
@@ -76,11 +84,13 @@ def ask_next_field(message):
     if not state:
         return cancel_operation(message)
     
-    fields = {
-        '🎬 Película': ['Título', 'Género', 'Año', 'Duración', 'Calidad', 'Sinopsis'],
-        '📺 Serie': ['Título', 'Género', 'Temporadas', 'Episodios', 'Calidad', 'Sinopsis'],
-        '🎮 Juego': ['Nombre', 'Género', 'Plataforma', 'Tamaño', 'Versión', 'Descripción']
-    }[state['type']]
+    fields_config = {
+        "🎬 Película": ['Título', 'Género', 'Año', 'Duración', 'Calidad', 'Sinopsis'],
+        "📺 Serie": ['Título', 'Género', 'Temporadas', 'Episodios', 'Calidad', 'Sinopsis'],
+        "🎮 Juego": ['Nombre', 'Género', 'Plataforma', 'Tamaño', 'Versión', 'Descripción']
+    }
+    
+    fields = fields_config[state['type']]
     
     if state['step'] < len(fields):
         field = fields[state['step']]
@@ -91,20 +101,25 @@ def ask_next_field(message):
         generate_template(message)
 
 def process_text_step(message):
-    user_id = message.from_user.id
     if message.text == "❌ Cancelar":
         return cancel_operation(message)
     
+    user_id = message.from_user.id
     state = USER_STATES.get(user_id)
+    
     if not state:
-        return
+        return cancel_operation(message)
     
-    field_index = state['step'] - 1
-    field_name = [
-        'title', 'genre', 'year', 'duration', 'quality', 'description'
-    ][field_index]
+    fields_mapping = {
+        "🎬 Película": ['title', 'genre', 'year', 'duration', 'quality', 'description'],
+        "📺 Serie": ['title', 'genre', 'seasons', 'episodes', 'quality', 'description'],
+        "🎮 Juego": ['name', 'genre', 'platform', 'size', 'version', 'description']
+    }
     
-    state[field_name] = message.text
+    current_step = state['step'] - 1
+    field_name = fields_mapping[state['type']][current_step]
+    state['data'][field_name] = message.text
+    
     ask_next_field(message)
 
 def generate_template(message):
@@ -112,31 +127,49 @@ def generate_template(message):
     state = USER_STATES.get(user_id)
     
     if not state:
-        return
+        return cancel_operation(message)
     
-    template = f"⭐ {state['type'].upper()} ⭐\n\n"
-    template += "\n".join([
-        f"🏷 Título: {state.get('title', 'N/A')}",
-        f"🎭 Género: {state.get('genre', 'N/A')}",
-        f"📅 Año: {state.get('year', 'N/A')}" if state['type'] == '🎬 Película' else f"📺 Temporadas: {state.get('year', 'N/A')}",
-        f"⏱ Duración: {state.get('duration', 'N/A')}" if state['type'] == '🎬 Película' else f"📊 Episodios: {state.get('duration', 'N/A')}",
-        f"📦 Calidad: {state.get('quality', 'N/A')}",
-        f"📝 Sinopsis: {state.get('description', 'N/A')}"
-    ])
+    template = ""
+    if state['type'] == "🎬 Película":
+        template = (
+            "🎬 *PLANTILLA DE PELÍCULA* 🎬\n\n"
+            f"🏷 Título: {state['data'].get('title', 'N/A')}\n"
+            f"🎭 Género: {state['data'].get('genre', 'N/A')}\n"
+            f"📅 Año: {state['data'].get('year', 'N/A')}\n"
+            f"⏱ Duración: {state['data'].get('duration', 'N/A')}\n"
+            f"📦 Calidad: {state['data'].get('quality', 'N/A')}\n"
+            f"📝 Sinopsis: {state['data'].get('description', 'N/A')}"
+        )
+    elif state['type'] == "📺 Serie":
+        template = (
+            "📺 *PLANTILLA DE SERIE* 📺\n\n"
+            f"🏷 Título: {state['data'].get('title', 'N/A')}\n"
+            f"🎭 Género: {state['data'].get('genre', 'N/A')}\n"
+            f"📑 Temporadas: {state['data'].get('seasons', 'N/A')}\n"
+            f"📚 Episodios: {state['data'].get('episodes', 'N/A')}\n"
+            f"📦 Calidad: {state['data'].get('quality', 'N/A')}\n"
+            f"📝 Sinopsis: {state['data'].get('description', 'N/A')}"
+        )
+    elif state['type'] == "🎮 Juego":
+        template = (
+            "🎮 *PLANTILLA DE JUEGO* 🎮\n\n"
+            f"🕹 Nombre: {state['data'].get('name', 'N/A')}\n"
+            f"🎭 Género: {state['data'].get('genre', 'N/A')}\n"
+            f"📱 Plataforma: {state['data'].get('platform', 'N/A')}\n"
+            f"💾 Tamaño: {state['data'].get('size', 'N/A')}\n"
+            f"🆕 Versión: {state['data'].get('version', 'N/A')}\n"
+            f"📄 Descripción: {state['data'].get('description', 'N/A')}"
+        )
     
     bot.send_photo(
         message.chat.id,
-        state['photo'],
+        state['data']['photo'],
         caption=template,
         reply_markup=main_menu()
     )
     USER_STATES.pop(user_id, None)
 
-# Handlers de opciones
-@bot.message_handler(func=lambda m: m.text in ["🎬 Película", "📺 Serie", "🎮 Juego"])
-def handle_template_selection(message):
-    handle_media_template(message, message.text)
-
+# ====================== YOUTUBE DOWNLOADER ======================
 @bot.message_handler(func=lambda m: m.text == "📸 YouTube")
 def handle_youtube(message):
     msg = bot.send_message(message.chat.id, "🔗 Envía la URL del video de YouTube:", reply_markup=cancel_menu())
@@ -148,7 +181,7 @@ def process_youtube_url(message):
     
     video_id = extract_video_id(message.text)
     if not video_id:
-        return bot.send_message(message.chat.id, "❌ URL inválida")
+        return bot.send_message(message.chat.id, "❌ URL inválida", reply_markup=main_menu())
     
     try:
         thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
@@ -160,16 +193,22 @@ def process_youtube_url(message):
         )
     except Exception as e:
         logger.error(f"Error YouTube: {e}")
-        bot.send_message(message.chat.id, "❌ Error al descargar la miniatura")
+        bot.send_message(message.chat.id, "❌ Error al descargar la miniatura", reply_markup=main_menu())
 
 def extract_video_id(url):
-    query = urlparse(url)
-    if query.hostname in ('youtube.com', 'www.youtube.com'):
-        if query.path == '/watch':
-            return parse_qs(query.query).get('v', [None])[0]
-    return query.path.split('/')[-1] if query.hostname == 'youtu.be' else None
+    try:
+        query = urlparse(url)
+        if query.hostname in ('youtube.com', 'www.youtube.com'):
+            if query.path == '/watch':
+                return parse_qs(query.query).get('v', [None])[0]
+            elif query.path.startswith('/embed/'):
+                return query.path.split('/')[2]
+        elif query.hostname == 'youtu.be':
+            return query.path[1:]
+    except:
+        return None
 
-# Sistema de soporte
+# ====================== SISTEMA DE SOPORTE ======================
 @bot.message_handler(func=lambda m: m.text == "🆘 Soporte")
 def handle_support(message):
     msg = bot.send_message(message.chat.id, "✉️ Escribe tu mensaje para soporte:", reply_markup=cancel_menu())
@@ -189,17 +228,18 @@ def forward_to_support(message):
     bot.send_message(ADMIN_CHAT_ID, report)
     bot.send_message(message.chat.id, "✅ Mensaje enviado a soporte", reply_markup=main_menu())
 
-# Administración
+# ====================== ADMINISTRACIÓN ======================
 @bot.message_handler(commands=['ban'])
 def handle_ban(message):
     if message.from_user.id != ADMIN_CHAT_ID:
         return
     
-    target = message.text.split()[1] if len(message.text.split()) > 1 else None
-    if not target:
+    args = message.text.split()
+    if len(args) < 2:
         return bot.send_message(message.chat.id, "Uso: /ban [user_id/@username]")
     
-    BANNED_USERS.add(target)
+    target = args[1]
+    BANNED_USERS.add(target.lower())
     bot.send_message(message.chat.id, f"✅ Usuario {target} baneado")
 
 @bot.message_handler(commands=['broadcast'])
@@ -207,20 +247,22 @@ def handle_broadcast(message):
     if message.from_user.id != ADMIN_CHAT_ID:
         return
     
-    text = ' '.join(message.text.split()[1:])
-    if not text:
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
         return bot.send_message(message.chat.id, "Uso: /broadcast [mensaje]")
     
-    results = {"success": 0, "failed": 0}
+    text = args[1]
+    results = {'success': 0, 'failed': 0}
+    
     for user_id in REGISTERED_USERS:
         try:
             if str(user_id) not in BANNED_USERS:
                 bot.send_message(user_id, text)
-                results["success"] += 1
+                results['success'] += 1
                 time.sleep(0.1)
         except Exception as e:
             logger.error(f"Error en broadcast: {e}")
-            results["failed"] += 1
+            results['failed'] += 1
     
     report = (
         "📊 Resultado del broadcast:\n"
@@ -230,5 +272,5 @@ def handle_broadcast(message):
     bot.send_message(message.chat.id, report)
 
 if __name__ == '__main__':
-    logger.info("Bot iniciado")
+    logger.info("Bot iniciado correctamente")
     bot.infinity_polling()
