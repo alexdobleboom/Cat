@@ -1,510 +1,234 @@
 import telebot
 from telebot import types
-import threading
-import http.server
-import socketserver
-import os
 import requests
+import threading
+import time
 from urllib.parse import urlparse, parse_qs
 from loguru import logger
-import sys
 
-# Configurar loguru para mostrar solo advertencias y errores
-logger.remove()  # Eliminar manejadores predeterminados
-logger.add(sys.stderr, level="WARNING")  # Solo mostrará WARN y ERROR en la consola
+# Configuración inicial
+TOKEN = '7507770865:AAFDQ0Lbuo5Ca-mTnqSa-dK_UJENs5B2v1Q'
+ADMIN_CHAT_ID = 7551486576  # Reemplaza con tu ID
+bot = telebot.TeleBot(TOKEN)
 
-bot = telebot.TeleBot('8034560855:AAEUzD4OgNWd0I6tMJopVdhPNWZVsBR7qXw')  # Reemplaza con tu token real
+# Estados del usuario
+USER_STATES = {}
+BANNED_USERS = set()
+REGISTERED_USERS = set()
 
-movie_info = {}
-serie_info = {}
-game_info = {}
-admin_chat_id = 7551486576  # Reemplaza con el chat ID del administrador
-banned_users = set()
-banned_ids = set()
-user_ids = set()
-user_in_template_process = {}
+# Configurar logger
+logger.add("bot.log", rotation="1 MB", retention="3 days", level="INFO")
 
-def is_user_banned(user_id, username):
-    return user_id in banned_ids or username in banned_users
+# Teclados
+def main_menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    buttons = ["🎬 Película", "📺 Serie", "🎮 Juego", "📸 YouTube", "🆘 Soporte"]
+    markup.add(*buttons)
+    return markup
 
-def banned_user_handler(message):
-    username = message.from_user.username or message.from_user.first_name
-    user_id = message.from_user.id
-    return is_user_banned(user_id, username)
+def cancel_menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("❌ Cancelar")
+    return markup
 
-def check_stop_command(message):
-    """Verifica si el mensaje es '⛔STOP' y cancela el proceso si es necesario."""
-    if message.text == "⛔STOP":
-        cancel_template(message)
-        return True
-    return False
-
-def send_message_with_rich_logging(chat_id, message, **kwargs):
-    if "error" in message.lower():
-        logger.warning(f"Enviando mensaje a {chat_id}: {message}")
-    bot.send_message(chat_id, message, **kwargs)
-
-@bot.message_handler(commands=['ban'])
-def ban_user(message):
-    if message.from_user.id == admin_chat_id:
-        args = message.text.split()
-        if len(args) > 1:
-            identifier = args[1]
-            if identifier.startswith('@'):
-                username_to_ban = identifier[1:]
-                banned_users.add(username_to_ban)
-                send_message_with_rich_logging(message.chat.id, f"✔️ 𝑼𝒔𝒖𝒂𝒓𝒊𝒐 @{username_to_ban} 𝒉𝒂 𝒔𝒊𝒅𝒐 𝒆𝒍𝒊𝒎𝒊𝒏𝒂𝒅𝒐 ✔️.")
-            else:
-                try:
-                    user_id_to_ban = int(identifier)
-                    banned_ids.add(user_id_to_ban)
-                    send_message_with_rich_logging(message.chat.id, f"✔️𝑼𝒔𝒖𝒂𝒓𝒊𝒐 𝒄𝒐𝒏 𝑰𝑫 {user_id_to_ban} 𝒉𝒂 𝒔𝒊𝒅𝒐 𝒆𝒍𝒊𝒎𝒊𝒏𝒂𝒅𝒐 ✔️.")
-                except ValueError:
-                    send_message_with_rich_logging(message.chat.id, "‼️𝑭𝒐𝒓𝒎𝒂𝒕𝒐 𝒊𝒏𝒄𝒐𝒓𝒓𝒆𝒄𝒕𝒐.𝑼𝒔𝒆 /ban @username 𝒐 /ban user_id ‼️.")
-        else:
-            send_message_with_rich_logging(message.chat.id, "⭕𝑬𝒔𝒑𝒆𝒄𝒊𝒇𝒊𝒄𝒂 𝒂𝒍 𝒖𝒔𝒖𝒂𝒓𝒊𝒐 𝒖𝒔𝒂𝒏𝒅𝒐: /ban @username o /ban user_id ⭕.")
-    else:
-        send_message_with_rich_logging(message.chat.id, "❌𝑵𝒐 𝒕𝒊𝒆𝒏𝒆 𝒑𝒆𝒓𝒎𝒊𝒔𝒐 𝒑𝒂𝒓𝒂 𝒖𝒔𝒂𝒓 𝒆𝒔𝒕𝒆 𝒄𝒐𝒎𝒂𝒏𝒅𝒐❌.")
-
-@bot.message_handler(commands=['send'])
-def send_message_to_all(message):
-    if message.from_user.id == admin_chat_id:
-        args = message.text.split(maxsplit=1)
-        if len(args) > 1:
-            text_message = args[1]
-            success_count = 0
-            for user_id in user_ids:
-                try:
-                    bot.send_message(user_id, text_message, parse_mode='MarkdownV2')
-                    success_count += 1
-                except Exception as e:
-                    logger.warning(f"⭕ 𝑬𝒓𝒓𝒐𝒓 𝒂𝒍 𝒆𝒏𝒗𝒊𝒂𝒓 𝒎𝒆𝒏𝒔𝒂𝒋𝒆 𝒂 {user_id}: {e}")
-            if success_count > 0:
-                send_message_with_rich_logging(message.chat.id, f"✔️ 𝑺𝒆 𝒆𝒏𝒗𝒊𝒐 𝒆𝒍 𝒎𝒆𝒏𝒔𝒂𝒋𝒆 𝒂 {success_count} 𝒖𝒔𝒖𝒂𝒓𝒊𝒐𝒔 ✔️.")
-        else:
-            send_message_with_rich_logging(message.chat.id, "⭕ 𝑬𝒔𝒑𝒆𝒄𝒊𝒇𝒊𝒄𝒂 𝒆𝒍 𝒎𝒆𝒏𝒔𝒂𝒋𝒆 ⭕.")
-    else:
-        send_message_with_rich_logging(message.chat.id, "❌ 𝑵𝒐 𝒑𝒐𝒔𝒆𝒆 𝒑𝒆𝒓𝒎𝒊𝒔𝒐 ❌.")
-
+# Handlers principales
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    if banned_user_handler(message):
+    user = message.from_user
+    if user.id in BANNED_USERS:
         return
-
-    user_ids.add(message.from_user.id)
-    username = message.from_user.username or message.from_user.first_name
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("PELICULA🎬", "SERIE📺", "GAME🎮", "Soporte📱")
-    send_message_with_rich_logging(message.chat.id, f"¡𝑯𝒐𝒍𝒂 {username}! 𝒔𝒐𝒚 𝒄𝒂𝒑𝒂𝒛 𝒅𝒆 𝒄𝒓𝒆𝒂𝒓 𝒑𝒍𝒂𝒏𝒕𝒊𝒍𝒍𝒂𝒔 \n\nChannel: @animalprojets:", reply_markup=markup)
-
-@bot.message_handler(func=lambda message: message.text == "Soporte📱")
-def support_command(message):
-    if banned_user_handler(message):
-        return
-
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("⛔STOP")
-    send_message_with_rich_logging(message.chat.id, "Escribe tu mensaje y lo enviaré al administrador:", reply_markup=markup)
-    bot.register_next_step_handler(message, receive_support_message)
-
-def receive_support_message(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    username = message.from_user.username or message.from_user.first_name
-    user_id = message.from_user.id
-    support_message = message.text
-    message_text = f"(@{username})\n(ID: {user_id})\nMensaje: {support_message}"
     
-    markup = types.InlineKeyboardMarkup()
-    button = types.InlineKeyboardButton("Responder", callback_data=f"reply_{user_id}")
-    markup.add(button)
+    REGISTERED_USERS.add(user.id)
+    welcome_msg = (
+        f"¡Hola {user.first_name}! 👋\n\n"
+        "📲 Con este bot puedes:\n"
+        "- Crear plantillas multimedia profesionales\n"
+        "- Descargar miniaturas de YouTube\n"
+        "- Contactar con soporte técnico\n\n"
+        "¡Elige una opción del menú!"
+    )
+    bot.send_message(message.chat.id, welcome_msg, reply_markup=main_menu())
 
-    send_message_with_rich_logging(admin_chat_id, message_text, reply_markup=markup)
-    send_message_with_rich_logging(message.chat.id, "¡Mensaje enviado con éxito!")
+@bot.message_handler(func=lambda m: m.text == "❌ Cancelar")
+def cancel_operation(message):
+    USER_STATES.pop(message.from_user.id, None)
+    bot.send_message(message.chat.id, "Operación cancelada ✅", reply_markup=main_menu())
 
-    main_menu(message)
+# Manejador de plantillas
+def handle_media_template(message, media_type):
+    USER_STATES[message.from_user.id] = {'type': media_type, 'step': 0}
+    msg = bot.send_message(message.chat.id, "📤 Envía la imagen principal:", reply_markup=cancel_menu())
+    bot.register_next_step_handler(msg, process_media_step)
 
-@bot.message_handler(func=lambda message: message.text == "mmm")
-def photo_command(message):
-    if banned_user_handler(message):
+def process_media_step(message):
+    user_id = message.from_user.id
+    if message.content_type != 'photo':
+        msg = bot.send_message(message.chat.id, "⚠️ Formato incorrecto. Envía una imagen válida:", reply_markup=cancel_menu())
+        return bot.register_next_step_handler(msg, process_media_step)
+    
+    USER_STATES[user_id]['photo'] = message.photo[-1].file_id
+    ask_next_field(message)
+
+def ask_next_field(message):
+    user_id = message.from_user.id
+    state = USER_STATES.get(user_id)
+    
+    if not state:
+        return cancel_operation(message)
+    
+    fields = {
+        '🎬 Película': ['Título', 'Género', 'Año', 'Duración', 'Calidad', 'Sinopsis'],
+        '📺 Serie': ['Título', 'Género', 'Temporadas', 'Episodios', 'Calidad', 'Sinopsis'],
+        '🎮 Juego': ['Nombre', 'Género', 'Plataforma', 'Tamaño', 'Versión', 'Descripción']
+    }[state['type']]
+    
+    if state['step'] < len(fields):
+        field = fields[state['step']]
+        state['step'] += 1
+        msg = bot.send_message(message.chat.id, f"✏️ {field}:", reply_markup=cancel_menu())
+        bot.register_next_step_handler(msg, process_text_step)
+    else:
+        generate_template(message)
+
+def process_text_step(message):
+    user_id = message.from_user.id
+    if message.text == "❌ Cancelar":
+        return cancel_operation(message)
+    
+    state = USER_STATES.get(user_id)
+    if not state:
         return
+    
+    field_index = state['step'] - 1
+    field_name = [
+        'title', 'genre', 'year', 'duration', 'quality', 'description'
+    ][field_index]
+    
+    state[field_name] = message.text
+    ask_next_field(message)
 
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("⛔STOP")
-    send_message_with_rich_logging(message.chat.id, "🔗 Introduce la URL del vídeo de YouTube:", reply_markup=markup)
-    bot.register_next_step_handler(message, process_youtube_url)
+def generate_template(message):
+    user_id = message.from_user.id
+    state = USER_STATES.get(user_id)
+    
+    if not state:
+        return
+    
+    template = f"⭐ {state['type'].upper()} ⭐\n\n"
+    template += "\n".join([
+        f"🏷 Título: {state.get('title', 'N/A')}",
+        f"🎭 Género: {state.get('genre', 'N/A')}",
+        f"📅 Año: {state.get('year', 'N/A')}" if state['type'] == '🎬 Película' else f"📺 Temporadas: {state.get('year', 'N/A')}",
+        f"⏱ Duración: {state.get('duration', 'N/A')}" if state['type'] == '🎬 Película' else f"📊 Episodios: {state.get('duration', 'N/A')}",
+        f"📦 Calidad: {state.get('quality', 'N/A')}",
+        f"📝 Sinopsis: {state.get('description', 'N/A')}"
+    ])
+    
+    bot.send_photo(
+        message.chat.id,
+        state['photo'],
+        caption=template,
+        reply_markup=main_menu()
+    )
+    USER_STATES.pop(user_id, None)
+
+# Handlers de opciones
+@bot.message_handler(func=lambda m: m.text in ["🎬 Película", "📺 Serie", "🎮 Juego"])
+def handle_template_selection(message):
+    handle_media_template(message, message.text)
+
+@bot.message_handler(func=lambda m: m.text == "📸 YouTube")
+def handle_youtube(message):
+    msg = bot.send_message(message.chat.id, "🔗 Envía la URL del video de YouTube:", reply_markup=cancel_menu())
+    bot.register_next_step_handler(msg, process_youtube_url)
 
 def process_youtube_url(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    url = message.text
-    video_id = obtener_id_video(url)
+    if message.text == "❌ Cancelar":
+        return cancel_operation(message)
     
-    if video_id:
-        descargar_miniatura(video_id, message.chat.id)
-    else:
-        send_message_with_rich_logging(message.chat.id, '⭕ URL no válida ⭕.')
-
-    main_menu(message)
-
-@bot.message_handler(func=lambda message: message.text == "PELICULA🎬")
-def start_movie_template(message):
-    if banned_user_handler(message):
-        return
-
-    user_in_template_process[message.from_user.id] = 'movie'
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("⛔STOP")
-    send_message_with_rich_logging(message.chat.id, "Envía una foto de la película:", reply_markup=markup)
-    bot.register_next_step_handler(message, get_movie_photo)
-
-def get_movie_photo(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    if message.photo:
-        movie_info['foto'] = message.photo[-1].file_id
-        send_message_with_rich_logging(message.chat.id, "📝 Envía el nombre:")
-        bot.register_next_step_handler(message, get_movie_name)
-    else:
-        bot.reply_to(message, "Envía una foto válida.")
-        bot.register_next_step_handler(message, get_movie_photo)
-
-def get_movie_name(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    movie_info['nombre'] = message.text
-    send_message_with_rich_logging(message.chat.id, "🔰 Envía género:")
-    bot.register_next_step_handler(message, get_movie_genre)
-
-def get_movie_genre(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    movie_info['genero'] = message.text
-    send_message_with_rich_logging(message.chat.id, "📅 Envía año:")
-    bot.register_next_step_handler(message, get_movie_year)
-
-def get_movie_year(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    movie_info['año'] = message.text
-    send_message_with_rich_logging(message.chat.id, "💾 Cuánto pesa:")
-    bot.register_next_step_handler(message, get_movie_size)
-
-def get_movie_size(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    movie_info['tamaño'] = message.text
-    send_message_with_rich_logging(message.chat.id, "⚙ Método de descarga:")
-    bot.register_next_step_handler(message, get_movie_method)
-
-def get_movie_method(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    movie_info['metodo'] = message.text
-    send_message_with_rich_logging(message.chat.id, "🎬 Envía la sinopsis:")
-    bot.register_next_step_handler(message, save_movie_info)
-
-def save_movie_info(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    movie_info['sinopsis'] = message.text
-
-    movie_template = f"📋Nombre: {movie_info['nombre']}\n🎬Género: {movie_info['genero']}\n📆Año: {movie_info['año']}\n💾Tamaño: {movie_info['tamaño']}\n☁Método de descarga: {movie_info['metodo']}\n🗒Sinopsis: {movie_info['sinopsis']}"
-    bot.send_photo(message.chat.id, movie_info['foto'], caption=movie_template)
-    movie_info.clear()
-    user_in_template_process.pop(message.from_user.id, None)
-
-    main_menu(message)
-
-@bot.message_handler(func=lambda message: message.text == "SERIE📺")
-def start_serie_template(message):
-    if banned_user_handler(message):
-        return
-
-    user_in_template_process[message.from_user.id] = 'serie'
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("⛔STOP")
-    send_message_with_rich_logging(message.chat.id, "Envía una foto de la serie:", reply_markup=markup)
-    bot.register_next_step_handler(message, get_serie_photo)
-
-def get_serie_photo(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    if message.photo:
-        serie_info['foto'] = message.photo[-1].file_id
-        send_message_with_rich_logging(message.chat.id, "✏ Envía el nombre:")
-        bot.register_next_step_handler(message, get_serie_name)
-    else:
-        bot.reply_to(message, "Envía una foto válida.")
-        bot.register_next_step_handler(message, get_serie_photo)
-
-def get_serie_name(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    serie_info['nombre'] = message.text
-    send_message_with_rich_logging(message.chat.id, "⚜ Envía género:")
-    bot.register_next_step_handler(message, get_serie_genre)
-
-def get_serie_genre(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    serie_info['genero'] = message.text
-    send_message_with_rich_logging(message.chat.id, "#⃣ Envía el # de capítulos:")
-    bot.register_next_step_handler(message, get_serie_num_caps)
-
-def get_serie_num_caps(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    serie_info['num_caps'] = message.text
-    send_message_with_rich_logging(message.chat.id, "🆕 Envía el # de temporada:")
-    bot.register_next_step_handler(message, get_serie_num_seasons)
-
-def get_serie_num_seasons(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    serie_info['num_seasons'] = message.text
-    send_message_with_rich_logging(message.chat.id, "💾 Envía el tamaño:")
-    bot.register_next_step_handler(message, get_serie_size)
-
-def get_serie_size(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    serie_info['tamaño'] = message.text
-    send_message_with_rich_logging(message.chat.id, "☁ Método de descarga:")
-    bot.register_next_step_handler(message, get_serie_method)
-
-def get_serie_method(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    serie_info['metodo'] = message.text
-    send_message_with_rich_logging(message.chat.id, "📑 Envía la sinopsis:")
-    bot.register_next_step_handler(message, save_serie_info)
-
-def save_serie_info(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    serie_info['sinopsis'] = message.text
-
-    serie_template = f"📋Nombre: {serie_info['nombre']}\n🎬Género: {serie_info['genero']}\n⏸# de Cap: {serie_info['num_caps']}\n▶# de Temp: {serie_info['num_seasons']}\n💾Tamaño: {serie_info['tamaño']}\n☁Método de descarga: {serie_info['metodo']}\n🗒Sinopsis: {serie_info['sinopsis']}"
-    bot.send_photo(message.chat.id, serie_info['foto'], caption=serie_template)
-    serie_info.clear()
-    user_in_template_process.pop(message.from_user.id, None)
-
-    main_menu(message)
-
-@bot.message_handler(func=lambda message: message.text == "GAME🎮")
-def start_game_template(message):
-    if banned_user_handler(message):
-        return
-
-    user_in_template_process[message.from_user.id] = 'game'
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("⛔STOP")
-    send_message_with_rich_logging(message.chat.id, "Envía una foto del juego:", reply_markup=markup)
-    bot.register_next_step_handler(message, get_game_photo)
-
-def get_game_photo(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    if message.photo:
-        game_info['foto'] = message.photo[-1].file_id
-        send_message_with_rich_logging(message.chat.id, "🛠 Envía el nombre:")
-        bot.register_next_step_handler(message, get_game_name)
-    else:
-        bot.reply_to(message, "Envía una foto válida.")
-        bot.register_next_step_handler(message, get_game_photo)
-
-def get_game_name(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    game_info['nombre'] = message.text
-    send_message_with_rich_logging(message.chat.id, "🔰 Ingresa el género:")
-    bot.register_next_step_handler(message, get_game_genre)
-
-def get_game_genre(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    game_info['genero'] = message.text
-    send_message_with_rich_logging(message.chat.id, "🔓 Envía info del mod:")
-    bot.register_next_step_handler(message, get_game_platform)
-
-def get_game_platform(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    game_info['plataforma'] = message.text
-    send_message_with_rich_logging(message.chat.id, "💾 Envía el tamaño:")
-    bot.register_next_step_handler(message, get_game_size)
-
-def get_game_size(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    game_info['tamaño'] = message.text
-    send_message_with_rich_logging(message.chat.id, "💠 Envía el método de descarga:")
-    bot.register_next_step_handler(message, get_game_method)
-
-def get_game_method(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    game_info['metodo'] = message.text
-    send_message_with_rich_logging(message.chat.id, "💬 De qué se trata:")
-    bot.register_next_step_handler(message, save_game_info)
-
-def save_game_info(message):
-    if banned_user_handler(message):
-        return
-
-    if check_stop_command(message):
-        return
-
-    game_info['sinopsis'] = message.text
-
-    game_template = f"🕹Nombre: {game_info['nombre']}\n🎬Género: {game_info['genero']}\n😈Info Mod: {game_info['plataforma']}\n💾Tamaño: {game_info['tamaño']}\n☁Método de descarga: {game_info['metodo']}\n🗒Sinopsis: {game_info['sinopsis']}"
-    bot.send_photo(message.chat.id, game_info['foto'], caption=game_template)
-    game_info.clear()
-    user_in_template_process.pop(message.from_user.id, None)
-
-    main_menu(message)
-
-def cancel_template(message):
-    user_id = message.from_user.id
-    user_in_template_process.pop(user_id, None)
-    main_menu(message)
-
-def main_menu(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("PELICULA🎬", "SERIE📺", "GAME🎮", "Soporte📱")
-    send_message_with_rich_logging(message.chat.id, "¡Elige una opción:", reply_markup=markup)
-
-def obtener_id_video(url):
-    parsed_url = urlparse(url)
-    if 'youtube.com' in parsed_url.netloc:
-        if 'v=' in parsed_url.query:
-            return parse_qs(parsed_url.query)['v'][0]
-    elif 'youtu.be' in parsed_url.netloc:
-        return parsed_url.path[1:]
-    return None
-
-def descargar_miniatura(video_id, chat_id):
-    url_miniatura = f'https://img.youtube.com/vi/{video_id}/maxresdefault.jpg'
+    video_id = extract_video_id(message.text)
+    if not video_id:
+        return bot.send_message(message.chat.id, "❌ URL inválida")
     
-    send_message_with_rich_logging(chat_id, "🔄 Descargando la miniatura..espera 5 segundos")
+    try:
+        thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+        bot.send_photo(
+            message.chat.id,
+            thumbnail_url,
+            caption="✅ Miniatura descargada correctamente",
+            reply_markup=main_menu()
+        )
+    except Exception as e:
+        logger.error(f"Error YouTube: {e}")
+        bot.send_message(message.chat.id, "❌ Error al descargar la miniatura")
+
+def extract_video_id(url):
+    query = urlparse(url)
+    if query.hostname in ('youtube.com', 'www.youtube.com'):
+        if query.path == '/watch':
+            return parse_qs(query.query).get('v', [None])[0]
+    return query.path.split('/')[-1] if query.hostname == 'youtu.be' else None
+
+# Sistema de soporte
+@bot.message_handler(func=lambda m: m.text == "🆘 Soporte")
+def handle_support(message):
+    msg = bot.send_message(message.chat.id, "✉️ Escribe tu mensaje para soporte:", reply_markup=cancel_menu())
+    bot.register_next_step_handler(msg, forward_to_support)
+
+def forward_to_support(message):
+    if message.text == "❌ Cancelar":
+        return cancel_operation(message)
     
-    response = requests.get(url_miniatura)
+    user = message.from_user
+    report = (
+        f"🆘 Nuevo reporte de @{user.username}\n"
+        f"ID: {user.id}\n"
+        f"Mensaje: {message.text}"
+    )
+    
+    bot.send_message(ADMIN_CHAT_ID, report)
+    bot.send_message(message.chat.id, "✅ Mensaje enviado a soporte", reply_markup=main_menu())
 
-    if response.status_code == 200:
-        carpeta = 'miniaturas_youtube'
-        os.makedirs(carpeta, exist_ok=True)
+# Administración
+@bot.message_handler(commands=['ban'])
+def handle_ban(message):
+    if message.from_user.id != ADMIN_CHAT_ID:
+        return
+    
+    target = message.text.split()[1] if len(message.text.split()) > 1 else None
+    if not target:
+        return bot.send_message(message.chat.id, "Uso: /ban [user_id/@username]")
+    
+    BANNED_USERS.add(target)
+    bot.send_message(message.chat.id, f"✅ Usuario {target} baneado")
 
-        ruta_archivo = os.path.join(carpeta, f'{video_id}.jpg')
-        with open(ruta_archivo, 'wb') as file:
-            file.write(response.content)
-        
-        bot.send_photo(chat_id, open(ruta_archivo, 'rb'), caption='⚡ Miniatura descargada 💾')
-    else:
-        send_message_with_rich_logging(chat_id, '🧐Error al descargar, contacte a él servicio de soporte 🧐')
+@bot.message_handler(commands=['broadcast'])
+def handle_broadcast(message):
+    if message.from_user.id != ADMIN_CHAT_ID:
+        return
+    
+    text = ' '.join(message.text.split()[1:])
+    if not text:
+        return bot.send_message(message.chat.id, "Uso: /broadcast [mensaje]")
+    
+    results = {"success": 0, "failed": 0}
+    for user_id in REGISTERED_USERS:
+        try:
+            if str(user_id) not in BANNED_USERS:
+                bot.send_message(user_id, text)
+                results["success"] += 1
+                time.sleep(0.1)
+        except Exception as e:
+            logger.error(f"Error en broadcast: {e}")
+            results["failed"] += 1
+    
+    report = (
+        "📊 Resultado del broadcast:\n"
+        f"✅ Enviados: {results['success']}\n"
+        f"❌ Fallidos: {results['failed']}"
+    )
+    bot.send_message(message.chat.id, report)
 
-def run_server():
-    PORT = 9000
-    with socketserver.TCPServer(("", PORT), http.server.SimpleHTTPRequestHandler) as httpd:
-        httpd.serve_forever()
-
-def run_bot():
-    bot.polling()
-
-if __name__ == "__main__":
-    server_thread = threading.Thread(target=run_server)
-    server_thread.daemon = True
-    server_thread.start()
-    run_bot()
+if __name__ == '__main__':
+    logger.info("Bot iniciado")
+    bot.infinity_polling()
