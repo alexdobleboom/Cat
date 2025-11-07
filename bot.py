@@ -6,7 +6,7 @@ from urllib.parse import urlparse, parse_qs
 from loguru import logger
 
 # Configuración inicial
-TOKEN = '8344397573:AAFPe-CE_zNOtMFiAmSPdmkUTDeBva86Es4'
+TOKEN = '8344397573:AAGMmXGb2d6D_Bhy85L5Z9ZhilRVcbp2Wc0'
 ADMIN_CHAT_ID = 7400531692 # Reemplaza con tu ID
 bot = telebot.TeleBot(TOKEN)
 
